@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8">
+  <title>Login</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="flex items-center justify-center h-screen bg-gray-100">
+  <form id="loginForm" class="bg-white p-6 rounded shadow-md w-96">
+    <h1 class="text-2xl mb-4 font-bold text-center">Login</h1>
+    <input type="email" name="email" id="email" placeholder="Email" required class="w-full p-2 mb-4 border rounded" />
+    <input type="password" name="senha" id="senha" placeholder="Senha" required class="w-full p-2 mb-4 border rounded" />
+    <button type="submit" class="bg-blue-600 text-white w-full py-2 rounded">Entrar</button>
+    <p id="msg" class="mt-2 text-center text-sm"></p>
+  </form>
+  <script>
+    const form = document.getElementById("loginForm");
+    const msg = document.getElementById("msg");
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const email = document.getElementById("email").value;
+      const senha = document.getElementById("senha").value;
+      const res = await fetch("http://127.0.0.1:8000/usuarios/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, senha })
+      });
+      const data = await res.json();
+      msg.textContent = data.mensagem || data.detail;
+      msg.className = res.ok ? 'text-green-600' : 'text-red-600';
+    });
+  </script>
+</body>
+</html>

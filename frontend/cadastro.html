@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8">
+  <title>Cadastro</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="flex items-center justify-center h-screen bg-gray-100">
+  <form id="cadastroForm" class="bg-white p-6 rounded shadow-md w-96">
+    <h1 class="text-2xl mb-4 font-bold text-center">Cadastro</h1>
+    <input type="text" name="nome" id="nome" placeholder="Nome completo" required class="w-full p-2 mb-4 border rounded" />
+    <input type="email" name="email" id="email" placeholder="Email" required class="w-full p-2 mb-4 border rounded" />
+    <input type="password" name="senha" id="senha" placeholder="Senha" minlength="8" required class="w-full p-2 mb-1 border rounded" />
+    <small class="text-gray-600 text-xs block mb-4">Use uma senha forte com no mínimo 8 caracteres, letras maiúsculas, minúsculas, números e símbolos.</small>
+
+    <label class="block text-sm mb-4">
+      <input type="checkbox" id="aceito_termos" required class="mr-2">
+      Eu li e aceito os <a href="/frontend/termos.html" target="_blank" class="text-blue-600 underline">Termos de Uso e Política de Privacidade</a>
+    </label>
+
+    <button type="submit" class="bg-green-600 text-white w-full py-2 rounded">Cadastrar</button>
+    <p id="msg" class="mt-2 text-center text-sm"></p>
+  </form>
+
+<script>
+const form = document.getElementById("cadastroForm");
+const msg = document.getElementById("msg");
+
+form.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const nome = document.getElementById("nome").value;
+  const email = document.getElementById("email").value;
+  const senha = document.getElementById("senha").value;
+
+  if (!document.getElementById("aceito_termos").checked) {
+    msg.textContent = "Você precisa aceitar os Termos de Uso.";
+    msg.className = 'text-red-600';
+    return;
+  }
+
+  const res = await fetch("http://127.0.0.1:8000/usuarios/cadastro", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ nome, email, senha })
+  });
+
+  const data = await res.json();
+
+  if (!res.ok) {
+    msg.textContent = data.detail || "Erro ao cadastrar.";
+    msg.className = 'text-red-600';
+    return;
+  }
+
+  // login automático após cadastro
+  const loginRes = await fetch("http://127.0.0.1:8000/usuarios/login", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      username: email,
+      password: senha
+    })
+  });
+
+  if (!loginRes.ok) {
+    msg.textContent = "Cadastro realizado, mas falha ao logar.";
+    msg.className = 'text-yellow-600';
+    return;
+  }
+
+  const loginData = await loginRes.json();
+  localStorage.setItem("token", loginData.access_token);
+
+  const rotaRes = await fetch("http://127.0.0.1:8000/usuarios/rota_por_papel", {
+    headers: { Authorization: `Bearer ${loginData.access_token}` }
+  });
+
+  const rotaData = await rotaRes.json();
+  if (rotaData.rota) {
+    window.location.href = rotaData.rota;
+  } else {
+    msg.textContent = "Erro ao identificar papel do usuário.";
+    msg.className = 'text-red-600';
+  }
+});
+</script>
+
+</body>
+</html>

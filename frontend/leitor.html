@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8">
+  <title>Leitor</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="p-6 bg-gray-100">
+  <div id="conteudo" class="text-gray-800 text-lg"></div>
+  <script>
+    const token = localStorage.getItem("token");
+    async function carregarDados() {
+      if (!token) return acessoNegado();
+      try {
+        const res = await fetch("http://127.0.0.1:8000/usuarios/me", {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        if (!res.ok) throw new Error();
+        const data = await res.json();
+        document.getElementById("conteudo").innerHTML = `
+          <div class="flex justify-between items-center mb-4">
+            <h1 class="text-2xl font-bold">Bem-vindo(a), ${data.nome}</h1>
+            <button onclick="logout()" class="bg-red-500 text-white px-4 py-2 rounded">Sair</button>
+          </div>
+          <p class="mb-2">Email: ${data.email}</p>
+          <p class="mb-2">Campo teste (visualização apenas)</p>
+          <div class="p-2 bg-white border rounded shadow mb-4">Texto visível apenas para leitores</div>
+          <button onclick="excluirConta()" class="bg-gray-700 text-white px-4 py-2 rounded">Excluir minha conta</button>
+        `;
+      } catch {
+        acessoNegado();
+      }
+    }
+    function logout() {
+      localStorage.removeItem("token");
+      window.location.href = "/frontend/login.html";
+    }
+    function excluirConta() {
+      if (!confirm("Tem certeza que deseja excluir sua conta?")) return;
+      fetch("http://127.0.0.1:8000/usuarios/excluir", {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` }
+      }).then(res => {
+        if (res.ok) {
+          alert("Conta excluída com sucesso.");
+          logout();
+        } else {
+          alert("Erro ao excluir conta.");
+        }
+      });
+    }
+    function acessoNegado() {
+      document.body.innerHTML = "<h1 class='text-red-600 text-center text-xl'>403 - Acesso negado</h1>";
+    }
+    carregarDados();
+  </script>
+</body>
+</html>
