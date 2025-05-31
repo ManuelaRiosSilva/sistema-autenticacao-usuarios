@@ -13,17 +13,45 @@
   <div id="tabela"></div>
   <script>
     const token = localStorage.getItem("token");
+
     async function carregar() {
       const res = await fetch("http://127.0.0.1:8000/usuarios/listar_todos", {
         headers: { Authorization: `Bearer ${token}` }
       });
       const dados = await res.json();
-      let html = `<table class='table-auto w-full border'><thead><tr><th>Nome</th><th>Email</th><th>Papéis</th><th>Alterar</th></tr></thead><tbody>`;
+
+      let html = `<table class='table-auto w-full border'>
+        <thead>
+          <tr>
+            <th class='border px-2 py-1'>Nome</th>
+            <th class='border px-2 py-1'>Email</th>
+            <th class='border px-2 py-1'>Papéis</th>
+            <th class='border px-2 py-1'>Alterar</th>
+          </tr>
+        </thead><tbody>`;
+
       dados.forEach(u => {
-        html += `<tr class='border'><td>${u.nome}</td><td>${u.email}</td><td>${u.papeis.join(", ")}</td>` +
-          `<td><select onchange="alterarRole(${u.id}, this.value)">` +
-          `<option value="leitor">Leitor</option><option value="editor">Editor</option><option value="admin">Admin</option></select></td></tr>`;
+        const isAdmin = u.papeis.includes("admin");
+
+        html += `<tr class='border'>
+          <td class='border px-2 py-1'>${u.nome}</td>
+          <td class='border px-2 py-1'>${u.email}</td>
+          <td class='border px-2 py-1'>${u.papeis.join(", ")}</td>`;
+
+        if (isAdmin) {
+          html += `<td class='border px-2 py-1 text-gray-400 italic'>-</td>`;
+        } else {
+          html += `<td class='border px-2 py-1'>
+            <select onchange="alterarRole(${u.id}, this.value)" class='border p-1 rounded'>
+              <option value="leitor">Leitor</option>
+              <option value="editor">Editor</option>
+            </select>
+          </td>`;
+        }
+
+        html += `</tr>`;
       });
+
       html += `</tbody></table>`;
       document.getElementById("tabela").innerHTML = html;
     }
@@ -36,7 +64,14 @@
           Authorization: `Bearer ${token}`
         },
         body: JSON.stringify({ usuario_id: id, papel })
-      }).then(() => carregar());
+      })
+      .then(async res => {
+        if (!res.ok) {
+          const erro = await res.json();
+          alert(erro.detail);
+        }
+        carregar();
+      });
     }
 
     function logout() {

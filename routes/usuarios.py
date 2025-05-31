@@ -159,15 +159,28 @@ def listar_todos(token: str = Depends(oauth2_scheme), db: Session = Depends(get_
 def alterar_papel(dados: dict, token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
     email = verificar_token_jwt(token)
     solicitante = db.query(Usuario).filter(Usuario.email == email).first()
+
     if not solicitante or "admin" not in [p.papel.nome for p in solicitante.papeis]:
         raise HTTPException(status_code=403, detail="Apenas admins podem alterar papéis.")
 
     usuario_id = dados["usuario_id"]
     novo_papel_nome = dados["papel"]
 
+    usuario_alvo = db.query(Usuario).filter(Usuario.id == usuario_id).first()
+    if not usuario_alvo:
+        raise HTTPException(status_code=404, detail="Usuário não encontrado")
+
+    papeis_alvo = [p.papel.nome for p in usuario_alvo.papeis]
+    if "admin" in papeis_alvo:
+        raise HTTPException(status_code=403, detail="Não é permitido alterar o papel de outro administrador.")
+
+    if novo_papel_nome == "admin":
+        raise HTTPException(status_code=403, detail="Admins não podem promover outros usuários a administradores.")
+
     papel = db.query(Papel).filter(Papel.nome == novo_papel_nome).first()
     if not papel:
         raise HTTPException(status_code=400, detail="Papel inválido.")
+
 
     db.query(UsuarioPapel).filter(UsuarioPapel.usuario_id == usuario_id).delete()
     db.add(UsuarioPapel(usuario_id=usuario_id, papel_id=papel.id))
@@ -175,11 +188,12 @@ def alterar_papel(dados: dict, token: str = Depends(oauth2_scheme), db: Session 
     db.add(LogAcesso(
         usuario_id=solicitante.id,
         acao=f"Alterou papel do usuário {usuario_id} para {novo_papel_nome}",
-        timestamp=datetime.utcnow()
+        data_hora=datetime.utcnow()
     ))
 
     db.commit()
     return {"mensagem": "Papel atualizado com sucesso"}
+
 
 
 @router.get("/rota_por_papel")
