@@ -105,29 +105,25 @@ def usuario_atual(token: str = Depends(oauth2_scheme), db: Session = Depends(get
         "papeis": [p.papel.nome for p in usuario.papeis]
     }
 
-@router.post("/reset_senha")
-def reset_senha(data: ResetSenhaInput, db: Session = Depends(get_db)):
-    usuario = db.query(Usuario).filter(Usuario.email == data.email).first()
-    if not usuario:
-        raise HTTPException(status_code=404, detail="Usuário não encontrado")
-    token = str(uuid.uuid4())
-    expiracao = datetime.utcnow() + timedelta(minutes=30)
-    db.add(TokenReset(usuario_id=usuario.id, token=token, data_expiracao=expiracao))
-    db.commit()
-    enviar_email_reset(usuario.email, token)
-    return {"mensagem": "Token enviado"}
-
-@router.post("/nova_senha")
-def nova_senha(data: NovaSenhaInput, db: Session = Depends(get_db)):
-    token = db.query(TokenReset).filter(TokenReset.token == data.token, TokenReset.em_uso == False).first()
-    if not token or token.data_expiracao < datetime.utcnow():
+@router.post("/trocar_senha")
+def trocar_senha(payload: TrocarSenha, db: Session = Depends(get_db)):
+    token_obj = db.query(TokenReset).filter_by(token=payload.token, em_uso=False).first()
+    if not token_obj:
         raise HTTPException(status_code=400, detail="Token inválido ou expirado")
-    usuario = db.query(Usuario).filter(Usuario.id == token.usuario_id).first()
-    usuario.senha_hash = gerar_hash_senha(data.nova_senha)
-    token.em_uso = True
-    db.commit()
-    return {"mensagem": "Senha redefinida com sucesso"}
 
+    usuario = db.query(Usuario).filter_by(id=token_obj.usuario_id).first()
+
+    if not senha_forte(payload.nova_senha):
+        raise HTTPException(status_code=400, detail="Senha fraca. Use letras maiúsculas, minúsculas, números e símbolos.")
+
+    if verificar_senha(payload.nova_senha, usuario.senha_hash):
+        raise HTTPException(status_code=400, detail="A nova senha deve ser diferente da atual.")
+
+    usuario.senha_hash = gerar_hash_senha(payload.nova_senha)
+    token_obj.em_uso = True
+    db.commit()
+
+    return {"mensagem": "Senha atualizada com sucesso."}
 
 def somente_admin(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
     email = verificar_token_jwt(token)
@@ -208,7 +204,9 @@ def solicitar_reset(dados: SolicitarResetSenha, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Email não encontrado")
 
     token = gerar_token()
-    novo_token = TokenReset(token=token, usuario_id=usuario.id)
+    expiracao = datetime.utcnow() + timedelta(minutes=30)
+    novo_token = TokenReset(token=token, usuario_id=usuario.id, data_expiracao=expiracao, em_uso=False)
+    
     db.add(novo_token)
     db.commit()
 
@@ -218,19 +216,20 @@ def solicitar_reset(dados: SolicitarResetSenha, db: Session = Depends(get_db)):
 
 @router.post("/trocar_senha")
 def trocar_senha(payload: TrocarSenha, db: Session = Depends(get_db)):
-    token_obj = db.query(TokenReset).filter_by(token=payload.token, expirado=False).first()
-    if not token_obj:
+    token_obj = db.query(TokenReset).filter_by(token=payload.token, em_uso=False).first()
+    if not token_obj or token_obj.data_expiracao < datetime.utcnow():
         raise HTTPException(status_code=400, detail="Token inválido ou expirado")
 
-    usuario = token_obj.usuario
-    if pwd_context.verify(payload.nova_senha, usuario.senha):
-        raise HTTPException(status_code=400, detail="A nova senha deve ser diferente da atual")
+    usuario = db.query(Usuario).filter_by(id=token_obj.usuario_id).first()
 
-    if len(payload.nova_senha) < 8:
-        raise HTTPException(status_code=400, detail="Senha muito fraca")
+    if not senha_forte(payload.nova_senha):
+        raise HTTPException(status_code=400, detail="Senha fraca. Use letras maiúsculas, minúsculas, números e símbolos.")
 
-    usuario.senha = pwd_context.hash(payload.nova_senha)
-    token_obj.expirado = True
+    if verificar_senha(payload.nova_senha, usuario.senha_hash):
+        raise HTTPException(status_code=400, detail="A nova senha deve ser diferente da atual.")
+
+    usuario.senha_hash = gerar_hash_senha(payload.nova_senha)  
+    token_obj.em_uso = True
     db.commit()
 
     return {"mensagem": "Senha atualizada com sucesso."}
