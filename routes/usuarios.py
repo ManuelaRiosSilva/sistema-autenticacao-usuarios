@@ -1,4 +1,3 @@
-import uuid
 import re
 from database import SessionLocal
 from sqlalchemy.orm import Session
@@ -9,7 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from models import Usuario, TokenReset, LogAcesso, Papel, UsuarioPapel
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from auth import gerar_hash_senha, verificar_senha, criar_token_jwt, verificar_token_jwt
-from schemas import UsuarioCreate, ResetSenhaInput, NovaSenhaInput, TokenJWT, SolicitarResetSenha, TrocarSenha
+from schemas import UsuarioCreate, TokenJWT, SolicitarResetSenha, TrocarSenha
 
 router = APIRouter()
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/usuarios/login")
@@ -70,16 +69,21 @@ def cadastro(usuario: UsuarioCreate, db: Session = Depends(get_db)):
     return {"mensagem": "Cadastro realizado com sucesso", "rota": "/frontend/leitor.html"}
 
 
-@router.delete("/excluir_conta")
+@router.delete("/excluir")
 def excluir_conta(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
     email = verificar_token_jwt(token)
-    usuario = db.query(Usuario).filter(Usuario.email == email).first()
+    if not email:
+        raise HTTPException(status_code=401, detail="Token inválido ou expirado")
+
+    usuario = db.query(Usuario).filter(Usuario.email == email, Usuario.ativo == 1).first()
     if not usuario:
         raise HTTPException(status_code=404, detail="Usuário não encontrado")
-    usuario.ativo = False
-    registrar_log(db, usuario.id, "127.0.0.1", "solicitou exclusão de conta")
+
+    usuario.ativo = 0
     db.commit()
     return {"mensagem": "Conta desativada com sucesso"}
+
+
 
 
 @router.post("/login", response_model=TokenJWT)

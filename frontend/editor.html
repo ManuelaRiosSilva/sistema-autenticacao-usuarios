@@ -41,8 +41,8 @@
     }
 
     function excluirConta() {
-      if (!confirm("Tem certeza que deseja excluir sua conta?")) return;
-      fetch("http://127.0.0.1:8000/usuarios/excluir_conta", {
+      if (!confirm("Tem certeza que deseja excluir sua conta? Esta ação não pode ser desfeita.")) return;
+      fetch("http://127.0.0.1:8000/usuarios/excluir", {
         method: "DELETE",
         headers: { Authorization: `Bearer ${token}` }
       }).then(res => {
@@ -54,6 +54,7 @@
         }
       });
     }
+
 
     function acessoNegado() {
       document.body.innerHTML = "<h1 class='text-red-600 text-center text-xl'>403 - Acesso negado</h1>";
