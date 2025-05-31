@@ -1,6 +1,4 @@
 import secrets
-import smtplib
-from email.mime.text import MIMEText
 from passlib.context import CryptContext
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
