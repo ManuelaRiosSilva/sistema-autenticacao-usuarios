@@ -35,7 +35,7 @@ class TokenReset(Base):
     id = Column(Integer, primary_key=True, index=True)
     token = Column(String, unique=True, index=True)
     usuario_id = Column(Integer, ForeignKey("usuarios.id"))
-    criado_em = Column(DateTime, default=datetime.datetime.utcnow)
+    criado_em = Column(DateTime, default=datetime.utcnow)
     expirado = Column(Boolean, default=False)
 
     usuario = relationship("Usuario", back_populates="tokens_reset")

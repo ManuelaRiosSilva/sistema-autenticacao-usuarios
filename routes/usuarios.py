@@ -1,9 +1,10 @@
 import uuid
+import re
 from database import SessionLocal
 from sqlalchemy.orm import Session
 from utils.logs import registrar_log
 from datetime import datetime, timedelta
-from utils.email import enviar_email_reset, pwd_context
+from utils.email import enviar_email_reset, pwd_context, gerar_token
 from fastapi import APIRouter, Depends, HTTPException, Request
 from models import Usuario, TokenReset, LogAcesso, Papel, UsuarioPapel
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
@@ -20,8 +21,26 @@ def get_db():
     finally:
         db.close()
 
+def senha_forte(senha: str) -> bool:
+    if len(senha) < 8:
+        return False
+    if not re.search(r"[A-Z]", senha):
+        return False
+    if not re.search(r"[a-z]", senha):
+        return False
+    if not re.search(r"[0-9]", senha):
+        return False
+    if not re.search(r"[\W_]", senha):  
+        return False
+    if re.fullmatch(r"(.)\1{7,}", senha):  
+        return False
+    return True
+
 @router.post("/cadastro")
 def cadastro(usuario: UsuarioCreate, db: Session = Depends(get_db)):
+    if not senha_forte(usuario.senha):
+        raise HTTPException(status_code=400, detail="Senha fraca. Use no mínimo 8 caracteres, com letras maiúsculas, minúsculas, números e símbolos.")
+    
     existente = db.query(Usuario).filter(Usuario.email == usuario.email).first()
     if existente:
         raise HTTPException(status_code=400, detail="E-mail já cadastrado.")
