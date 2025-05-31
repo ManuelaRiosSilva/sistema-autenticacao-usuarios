@@ -2,30 +2,39 @@
 <html lang="pt-br">
 <head>
   <meta charset="UTF-8">
-  <title>Reset de Senha</title>
+  <title>Redefinir Senha</title>
   <script src="https://cdn.tailwindcss.com"></script>
 </head>
-<body class="flex items-center justify-center h-screen bg-gray-100">
-  <form id="resetForm" class="bg-white p-6 rounded shadow-md w-96">
-    <h1 class="text-2xl mb-4 font-bold text-center">Redefinir Senha</h1>
-    <input type="email" name="email" id="email" placeholder="Digite seu email" required class="w-full p-2 mb-4 border rounded" />
-    <button type="submit" class="bg-yellow-600 text-white w-full py-2 rounded">Enviar Token</button>
-    <p id="msg" class="mt-2 text-center text-sm"></p>
+<body class="p-6 bg-gray-100 text-center">
+  <h1 class="text-2xl font-bold mb-4">Redefinir Senha</h1>
+  <form id="resetForm">
+    <input type="password" id="nova_senha" placeholder="Nova senha" required class="p-2 border rounded w-full mb-2" />
+    <button type="submit" class="bg-blue-500 text-white px-4 py-2 rounded">Atualizar</button>
+    <p id="msg" class="mt-2 text-red-600"></p>
   </form>
   <script>
+    const urlParams = new URLSearchParams(window.location.search);
+    const token = urlParams.get("token");
     const form = document.getElementById("resetForm");
-    const msg = document.getElementById("msg");
+
     form.addEventListener("submit", async (e) => {
       e.preventDefault();
-      const email = document.getElementById("email").value;
-      const res = await fetch("http://127.0.0.1:8000/usuarios/reset_senha", {
+      const nova_senha = document.getElementById("nova_senha").value;
+
+      const res = await fetch("http://127.0.0.1:8000/usuarios/trocar_senha", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email })
+        body: JSON.stringify({ nova_senha, token })
       });
+
       const data = await res.json();
-      msg.textContent = res.ok ? "Token enviado para o email." : data.detail;
-      msg.className = res.ok ? 'text-green-600' : 'text-red-600';
+      const msg = document.getElementById("msg");
+      if (res.ok) {
+        msg.textContent = "Senha redefinida com sucesso.";
+        msg.className = "text-green-600";
+      } else {
+        msg.textContent = data.detail || "Erro";
+      }
     });
   </script>
 </body>

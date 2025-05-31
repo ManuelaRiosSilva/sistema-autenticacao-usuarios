@@ -1,8 +1,8 @@
 from fastapi import FastAPI
+from routes import usuarios, logs
+from database import Base, engine
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
-from database import Base, engine
-from routes import usuarios, logs
 
 app = FastAPI()
 

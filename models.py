@@ -1,7 +1,7 @@
-from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, DateTime
-from sqlalchemy.orm import relationship
 from database import Base
 from datetime import datetime
+from sqlalchemy.orm import relationship
+from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, DateTime
 
 class Usuario(Base):
     __tablename__ = "usuarios"
@@ -13,6 +13,7 @@ class Usuario(Base):
     data_exclusao = Column(DateTime, nullable=True)
     ativo = Column(Boolean, default=True)
     anonimizado = Column(Boolean, default=False)
+    tokens_reset = relationship("TokenReset", back_populates="usuario")
 
     papeis = relationship("UsuarioPapel", back_populates="usuario")
     logs = relationship("LogAcesso", back_populates="usuario")
@@ -31,11 +32,13 @@ class UsuarioPapel(Base):
 
 class TokenReset(Base):
     __tablename__ = "tokens_reset"
-    id = Column(Integer, primary_key=True)
+    id = Column(Integer, primary_key=True, index=True)
+    token = Column(String, unique=True, index=True)
     usuario_id = Column(Integer, ForeignKey("usuarios.id"))
-    token = Column(String(250), unique=True)
-    data_expiracao = Column(DateTime)
-    em_uso = Column(Boolean, default=False)
+    criado_em = Column(DateTime, default=datetime.datetime.utcnow)
+    expirado = Column(Boolean, default=False)
+
+    usuario = relationship("Usuario", back_populates="tokens_reset")
 
 class LogAcesso(Base):
     __tablename__ = "logs_acesso"

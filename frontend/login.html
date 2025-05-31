@@ -13,22 +13,58 @@
     <button type="submit" class="bg-blue-600 text-white w-full py-2 rounded">Entrar</button>
     <p id="msg" class="mt-2 text-center text-sm"></p>
   </form>
-  <script>
-    const form = document.getElementById("loginForm");
-    const msg = document.getElementById("msg");
-    form.addEventListener("submit", async (e) => {
-      e.preventDefault();
-      const email = document.getElementById("email").value;
-      const senha = document.getElementById("senha").value;
+<script>
+  const form = document.getElementById("loginForm");
+  const msg = document.getElementById("msg");
+
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    msg.textContent = "";
+
+    const email = document.getElementById("email").value;
+    const senha = document.getElementById("senha").value;
+
+    try {
       const res = await fetch("http://127.0.0.1:8000/usuarios/login", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, senha })
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded"
+        },
+        body: new URLSearchParams({
+          username: email,
+          password: senha
+        })
       });
+
       const data = await res.json();
-      msg.textContent = data.mensagem || data.detail;
-      msg.className = res.ok ? 'text-green-600' : 'text-red-600';
-    });
-  </script>
+
+      if (res.ok && data.access_token) {
+        localStorage.setItem("token", data.access_token);
+
+        const rotaRes = await fetch("http://127.0.0.1:8000/usuarios/rota_por_papel", {
+          headers: {
+            Authorization: `Bearer ${data.access_token}`
+          }
+        });
+
+        const rotaData = await rotaRes.json();
+
+        if (rotaRes.ok && rotaData.rota) {
+          window.location.href = rotaData.rota;
+        } else {
+          msg.textContent = rotaData.detail || "Erro ao redirecionar.";
+          msg.className = "text-red-600";
+        }
+
+      } else {
+        msg.textContent = data.detail || "Credenciais inválidas.";
+        msg.className = "text-red-600";
+      }
+    } catch (error) {
+      msg.textContent = "Erro na conexão ou resposta inesperada.";
+      msg.className = "text-red-600";
+    }
+  });
+</script>
 </body>
 </html>

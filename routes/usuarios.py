@@ -1,14 +1,14 @@
-from fastapi import APIRouter, Depends, HTTPException, Request
-from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
-from sqlalchemy.orm import Session
-from database import SessionLocal
-from models import Usuario, TokenReset, LogAcesso, Papel, UsuarioPapel
-from schemas import UsuarioCreate, ResetSenhaInput, NovaSenhaInput, TokenJWT
-from auth import gerar_hash_senha, verificar_senha, criar_token_jwt, verificar_token_jwt
-from utils.email import enviar_email_reset
-from utils.logs import registrar_log
 import uuid
+from database import SessionLocal
+from sqlalchemy.orm import Session
+from utils.logs import registrar_log
 from datetime import datetime, timedelta
+from utils.email import enviar_email_reset, pwd_context
+from fastapi import APIRouter, Depends, HTTPException, Request
+from models import Usuario, TokenReset, LogAcesso, Papel, UsuarioPapel
+from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+from auth import gerar_hash_senha, verificar_senha, criar_token_jwt, verificar_token_jwt
+from schemas import UsuarioCreate, ResetSenhaInput, NovaSenhaInput, TokenJWT, SolicitarResetSenha, TrocarSenha
 
 router = APIRouter()
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/usuarios/login")
@@ -180,3 +180,38 @@ def rota_por_papel(token: str = Depends(oauth2_scheme), db: Session = Depends(ge
         return {"rota": "/frontend/leitor.html"}
     else:
         raise HTTPException(status_code=403, detail="Usuário sem papel definido")
+
+
+@router.post("/esqueci_senha")
+def solicitar_reset(dados: SolicitarResetSenha, db: Session = Depends(get_db)):
+    usuario = db.query(Usuario).filter_by(email=dados.email).first()
+    if not usuario:
+        raise HTTPException(status_code=404, detail="Email não encontrado")
+
+    token = gerar_token()
+    novo_token = TokenReset(token=token, usuario_id=usuario.id)
+    db.add(novo_token)
+    db.commit()
+
+    link = f"http://127.0.0.1:8000/frontend/reset_senha.html?token={token}"
+    enviar_email_reset(usuario.email, link)
+    return {"mensagem": "Email de redefinição enviado."}
+
+@router.post("/trocar_senha")
+def trocar_senha(payload: TrocarSenha, db: Session = Depends(get_db)):
+    token_obj = db.query(TokenReset).filter_by(token=payload.token, expirado=False).first()
+    if not token_obj:
+        raise HTTPException(status_code=400, detail="Token inválido ou expirado")
+
+    usuario = token_obj.usuario
+    if pwd_context.verify(payload.nova_senha, usuario.senha):
+        raise HTTPException(status_code=400, detail="A nova senha deve ser diferente da atual")
+
+    if len(payload.nova_senha) < 8:
+        raise HTTPException(status_code=400, detail="Senha muito fraca")
+
+    usuario.senha = pwd_context.hash(payload.nova_senha)
+    token_obj.expirado = True
+    db.commit()
+
+    return {"mensagem": "Senha atualizada com sucesso."}
