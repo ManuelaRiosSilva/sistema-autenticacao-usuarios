@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="pt-br">
 <head>
-  <meta charset="UTF-8">
+  <meta charset="UTF-8" />
   <title>Redefinir Senha</title>
   <script src="https://cdn.tailwindcss.com"></script>
 </head>
@@ -12,12 +12,12 @@
     <button type="submit" class="bg-blue-500 text-white px-4 py-2 rounded">Atualizar</button>
     <p id="msg" class="mt-2 text-red-600"></p>
   </form>
+
   <script>
     const urlParams = new URLSearchParams(window.location.search);
     const token = urlParams.get("token");
-    const form = document.getElementById("resetForm");
 
-    form.addEventListener("submit", async (e) => {
+    document.getElementById("resetForm").addEventListener("submit", async (e) => {
       e.preventDefault();
       const nova_senha = document.getElementById("nova_senha").value;
 
@@ -29,11 +29,13 @@
 
       const data = await res.json();
       const msg = document.getElementById("msg");
+
       if (res.ok) {
         msg.textContent = "Senha redefinida com sucesso.";
         msg.className = "text-green-600";
       } else {
-        msg.textContent = data.detail || "Erro";
+        msg.textContent = data.detail || "Erro ao redefinir senha";
+        msg.className = "text-red-600";
       }
     });
   </script>

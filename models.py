@@ -32,13 +32,12 @@ class UsuarioPapel(Base):
 
 class TokenReset(Base):
     __tablename__ = "tokens_reset"
-    id = Column(Integer, primary_key=True, index=True)
-    token = Column(String, unique=True, index=True)
+    id = Column(Integer, primary_key=True)
+    token = Column(String, unique=True)
     usuario_id = Column(Integer, ForeignKey("usuarios.id"))
-    criado_em = Column(DateTime, default=datetime.datetime.utcnow)
-    expirado = Column(Boolean, default=False)
-
-    usuario = relationship("Usuario", back_populates="tokens_reset")
+    expira_em = Column(DateTime)
+    criado_em = Column(DateTime, default=datetime.utcnow)
+    usuario = relationship("Usuario")
 
 class LogAcesso(Base):
     __tablename__ = "logs_acesso"

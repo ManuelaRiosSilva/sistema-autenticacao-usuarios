@@ -1,17 +1,18 @@
-import uuid
-from database import SessionLocal
-from sqlalchemy.orm import Session
-from utils.logs import registrar_log
+from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import JSONResponse
+from passlib.hash import bcrypt
 from datetime import datetime, timedelta
-from utils.email import enviar_email_reset, pwd_context
-from fastapi import APIRouter, Depends, HTTPException, Request
-from models import Usuario, TokenReset, LogAcesso, Papel, UsuarioPapel
-from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
-from auth import gerar_hash_senha, verificar_senha, criar_token_jwt, verificar_token_jwt
-from schemas import UsuarioCreate, ResetSenhaInput, NovaSenhaInput, TokenJWT, SolicitarResetSenha, TrocarSenha
+from models import Usuario, TokenReset
+from schemas import EsqueciSenhaRequest, NovaSenhaRequest
+from sqlalchemy.orm import Session
+from database import SessionLocal
+from fastapi.security import OAuth2PasswordRequestForm
+from auth import verificar_senha, criar_token_jwt
+from utils.email import enviar_email
+import secrets
+import re
 
 router = APIRouter()
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/usuarios/login")
 
 def get_db():
     db = SessionLocal()
@@ -20,198 +21,65 @@ def get_db():
     finally:
         db.close()
 
-@router.post("/cadastro")
-def cadastro(usuario: UsuarioCreate, db: Session = Depends(get_db)):
-    existente = db.query(Usuario).filter(Usuario.email == usuario.email).first()
-    if existente:
-        raise HTTPException(status_code=400, detail="E-mail já cadastrado.")
 
-    novo = Usuario(
-        nome=usuario.nome,
-        email=usuario.email,
-        senha_hash=gerar_hash_senha(usuario.senha),
-        data_criacao=datetime.utcnow(),
-        ativo=True,
-        anonimizado=False
-    )
-    db.add(novo)
-    db.commit()
-    db.refresh(novo)
+@router.post("/login")
+def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
+    email = form_data.username
+    senha = form_data.password
 
-    papel_leitor = db.query(Papel).filter(Papel.nome == "leitor").first()
-    if not papel_leitor:
-        papel_leitor = Papel(nome="leitor")
-        db.add(papel_leitor)
-        db.commit()
-        db.refresh(papel_leitor)
-
-    db.add(UsuarioPapel(usuario_id=novo.id, papel_id=papel_leitor.id))
-    db.commit()
-
-    return {"mensagem": "Cadastro realizado com sucesso", "rota": "/frontend/leitor.html"}
-
-
-@router.delete("/excluir_conta")
-def excluir_conta(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
-    email = verificar_token_jwt(token)
-    usuario = db.query(Usuario).filter(Usuario.email == email).first()
-    if not usuario:
-        raise HTTPException(status_code=404, detail="Usuário não encontrado")
-    usuario.ativo = False
-    registrar_log(db, usuario.id, "127.0.0.1", "solicitou exclusão de conta")
-    db.commit()
-    return {"mensagem": "Conta desativada com sucesso"}
-
-
-@router.post("/login", response_model=TokenJWT)
-def login_token(form_data: OAuth2PasswordRequestForm = Depends(), request: Request = None, db: Session = Depends(get_db)):
-    usuario = db.query(Usuario).filter(Usuario.email == form_data.username).first()
-    if not usuario or not verificar_senha(form_data.password, usuario.senha_hash):
-        registrar_log(db, None, request.client.host, "falha_login")
-        raise HTTPException(status_code=401, detail="Credenciais inválidas")
-    registrar_log(db, usuario.id, request.client.host, "login")
-    access_token = criar_token_jwt(usuario.email)
-    return {"access_token": access_token}
-
-@router.get("/me")
-def usuario_atual(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
-    email = verificar_token_jwt(token)
-    if not email:
-        raise HTTPException(status_code=401, detail="Token inválido ou expirado")
-    usuario = db.query(Usuario).filter(Usuario.email == email).first()
-    return {
-        "id": usuario.id,
-        "nome": usuario.nome,
-        "email": usuario.email,
-        "papeis": [p.papel.nome for p in usuario.papeis]
-    }
-
-@router.post("/reset_senha")
-def reset_senha(data: ResetSenhaInput, db: Session = Depends(get_db)):
-    usuario = db.query(Usuario).filter(Usuario.email == data.email).first()
-    if not usuario:
-        raise HTTPException(status_code=404, detail="Usuário não encontrado")
-    token = str(uuid.uuid4())
-    expiracao = datetime.utcnow() + timedelta(minutes=30)
-    db.add(TokenReset(usuario_id=usuario.id, token=token, data_expiracao=expiracao))
-    db.commit()
-    enviar_email_reset(usuario.email, token)
-    return {"mensagem": "Token enviado"}
-
-@router.post("/nova_senha")
-def nova_senha(data: NovaSenhaInput, db: Session = Depends(get_db)):
-    token = db.query(TokenReset).filter(TokenReset.token == data.token, TokenReset.em_uso == False).first()
-    if not token or token.data_expiracao < datetime.utcnow():
-        raise HTTPException(status_code=400, detail="Token inválido ou expirado")
-    usuario = db.query(Usuario).filter(Usuario.id == token.usuario_id).first()
-    usuario.senha_hash = gerar_hash_senha(data.nova_senha)
-    token.em_uso = True
-    db.commit()
-    return {"mensagem": "Senha redefinida com sucesso"}
-
-
-def somente_admin(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
-    email = verificar_token_jwt(token)
-    usuario = db.query(Usuario).filter(Usuario.email == email).first()
-    if not usuario or not any(p.papel.nome == 'admin' for p in usuario.papeis):
-        raise HTTPException(status_code=403, detail="Acesso restrito a administradores")
-    return usuario
-
-@router.get("/listar_todos")
-def listar_todos(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
-    email = verificar_token_jwt(token)
-    usuario = db.query(Usuario).filter(Usuario.email == email).first()
-    if not usuario or "admin" not in [p.papel.nome for p in usuario.papeis]:
-        raise HTTPException(status_code=403, detail="Acesso negado")
-
-    usuarios = db.query(Usuario).filter(Usuario.ativo == True).all()
-    resultado = []
-    for u in usuarios:
-        resultado.append({
-            "id": u.id,
-            "nome": u.nome,
-            "email": u.email,
-            "papeis": [p.papel.nome for p in u.papeis]
-        })
-    return resultado
-
-
-@router.post("/alterar_papel")
-def alterar_papel(dados: dict, token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
-    email = verificar_token_jwt(token)
-    solicitante = db.query(Usuario).filter(Usuario.email == email).first()
-    if not solicitante or "admin" not in [p.papel.nome for p in solicitante.papeis]:
-        raise HTTPException(status_code=403, detail="Apenas admins podem alterar papéis.")
-
-    usuario_id = dados["usuario_id"]
-    novo_papel_nome = dados["papel"]
-
-    papel = db.query(Papel).filter(Papel.nome == novo_papel_nome).first()
-    if not papel:
-        raise HTTPException(status_code=400, detail="Papel inválido.")
-
-    db.query(UsuarioPapel).filter(UsuarioPapel.usuario_id == usuario_id).delete()
-    db.add(UsuarioPapel(usuario_id=usuario_id, papel_id=papel.id))
-
-    db.add(LogAcesso(
-        usuario_id=solicitante.id,
-        acao=f"Alterou papel do usuário {usuario_id} para {novo_papel_nome}",
-        timestamp=datetime.utcnow()
-    ))
-
-    db.commit()
-    return {"mensagem": "Papel atualizado com sucesso"}
-
-
-@router.get("/rota_por_papel")
-def rota_por_papel(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
-    email = verificar_token_jwt(token)
     usuario = db.query(Usuario).filter(Usuario.email == email, Usuario.ativo == True).first()
-
     if not usuario:
-        raise HTTPException(status_code=403, detail="Usuário inativo ou inválido")
+        raise HTTPException(status_code=404, detail="Usuário inexistente")
 
-    papeis = [p.papel.nome for p in usuario.papeis]
-    if "admin" in papeis:
-        return {"rota": "/frontend/admin.html"}
-    elif "editor" in papeis:
-        return {"rota": "/frontend/editor.html"}
-    elif "leitor" in papeis:
-        return {"rota": "/frontend/leitor.html"}
-    else:
-        raise HTTPException(status_code=403, detail="Usuário sem papel definido")
+    if not verificar_senha(senha, usuario.senha_hash):
+        raise HTTPException(status_code=401, detail="Senha incorreta")
+
+    token = criar_token_jwt(usuario.id)
+    return {"access_token": token, "token_type": "bearer"}
 
 
 @router.post("/esqueci_senha")
-def solicitar_reset(dados: SolicitarResetSenha, db: Session = Depends(get_db)):
-    usuario = db.query(Usuario).filter_by(email=dados.email).first()
+def esqueci_senha(req: EsqueciSenhaRequest, db: Session = Depends(get_db)):
+    usuario = db.query(Usuario).filter(Usuario.email == req.email).first()
     if not usuario:
-        raise HTTPException(status_code=404, detail="Email não encontrado")
-
-    token = gerar_token()
-    novo_token = TokenReset(token=token, usuario_id=usuario.id)
+        raise HTTPException(status_code=404, detail="Usuário não encontrado")
+    
+    token = secrets.token_urlsafe(32)
+    expira = datetime.utcnow() + timedelta(hours=1)
+    novo_token = TokenReset(token=token, usuario_id=usuario.id, expira_em=expira)
     db.add(novo_token)
     db.commit()
 
-    link = f"http://127.0.0.1:8000/frontend/reset_senha.html?token={token}"
-    enviar_email_reset(usuario.email, link)
-    return {"mensagem": "Email de redefinição enviado."}
+    link = f"http://127.0.0.1:8000/frontend/nova_senha.html?token={token}"
+    corpo = f"""
+        <p>Olá {usuario.nome},</p>
+        <p>Recebemos sua solicitação de redefinição de senha. Clique no botão abaixo:</p>
+        <a href="{link}" style="padding: 10px 15px; background-color: #007bff; color: white; text-decoration: none; border-radius: 5px;">Redefinir Senha</a>
+    """
+    enviar_email(destinatario=usuario.email, assunto="Redefinição de senha", corpo=corpo)
+    return {"mensagem": "Email enviado com sucesso"}
 
-@router.post("/trocar_senha")
-def trocar_senha(payload: TrocarSenha, db: Session = Depends(get_db)):
-    token_obj = db.query(TokenReset).filter_by(token=payload.token, expirado=False).first()
-    if not token_obj:
+def senha_forte(s: str) -> bool:
+    return (len(s) >= 8 and re.search(r"[A-Z]", s) and re.search(r"[a-z]", s)
+            and re.search(r"\d", s) and re.search(r"[^\w\s]", s))
+
+@router.post("/nova_senha")
+def nova_senha(dados: NovaSenhaRequest, db: Session = Depends(get_db)):
+    token = db.query(TokenReset).filter(TokenReset.token == dados.token).first()
+    if not token or token.expira_em < datetime.utcnow():
         raise HTTPException(status_code=400, detail="Token inválido ou expirado")
 
-    usuario = token_obj.usuario
-    if pwd_context.verify(payload.nova_senha, usuario.senha):
-        raise HTTPException(status_code=400, detail="A nova senha deve ser diferente da atual")
+    usuario = db.query(Usuario).filter(Usuario.id == token.usuario_id).first()
+    if not usuario:
+        raise HTTPException(status_code=404, detail="Usuário não encontrado")
 
-    if len(payload.nova_senha) < 8:
-        raise HTTPException(status_code=400, detail="Senha muito fraca")
+    if not senha_forte(dados.nova_senha):
+        raise HTTPException(status_code=400, detail="Senha fraca. Use letras maiúsculas, minúsculas, número e símbolo.")
 
-    usuario.senha = pwd_context.hash(payload.nova_senha)
-    token_obj.expirado = True
+    if bcrypt.verify(dados.nova_senha, usuario.senha_hash):
+        raise HTTPException(status_code=400, detail="A nova senha não pode ser igual à antiga.")
+
+    usuario.senha_hash = bcrypt.hash(dados.nova_senha)
+    db.delete(token)
     db.commit()
-
-    return {"mensagem": "Senha atualizada com sucesso."}
+    return {"mensagem": "Senha atualizada com sucesso"}

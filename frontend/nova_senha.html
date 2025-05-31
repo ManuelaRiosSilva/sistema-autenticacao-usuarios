@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8">
+  <title>Nova Senha</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="p-6 bg-gray-100">
+  <div class="max-w-md mx-auto bg-white p-6 rounded shadow">
+    <h2 class="text-2xl font-bold mb-4 text-center">Escolha uma nova senha</h2>
+    <form id="novaSenhaForm" class="space-y-4">
+      <input type="password" id="novaSenha" placeholder="Nova senha" class="w-full border p-2 rounded" required />
+      <small class="text-gray-600 block">
+        Mínimo 8 caracteres, com letras maiúsculas, minúsculas, números e símbolos.
+      </small>
+      <button type="submit" class="w-full bg-green-600 text-white py-2 rounded">Alterar senha</button>
+    </form>
+    <div id="resposta" class="mt-4 text-center text-red-600"></div>
+  </div>
+
+  <script>
+    const token = new URLSearchParams(window.location.search).get("token");
+    document.getElementById("novaSenhaForm").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const senha = document.getElementById("novaSenha").value;
+      const res = await fetch("http://127.0.0.1:8000/usuarios/trocar_senha", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token, nova_senha: senha })
+      });
+      const data = await res.json();
+      document.getElementById("resposta").textContent = data.detail || data.mensagem;
+      if (res.ok) document.getElementById("resposta").className = "text-green-600 mt-4 text-center";
+    });
+  </script>
+</body>
+</html>

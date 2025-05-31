@@ -18,7 +18,7 @@ Base.metadata.create_all(bind=engine)
 
 app.mount("/frontend", StaticFiles(directory="frontend"), name="frontend")
 
-app.include_router(usuarios.router, prefix="/usuarios", tags=["Usuários"])
+app.include_router(usuarios.router, tags=["Usuários"])
 app.include_router(logs.router, prefix="/logs", tags=["Logs"])
 
 @app.get("/")

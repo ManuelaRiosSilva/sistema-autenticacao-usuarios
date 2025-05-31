@@ -1,70 +1,56 @@
 <!DOCTYPE html>
 <html lang="pt-br">
 <head>
-  <meta charset="UTF-8">
+  <meta charset="UTF-8" />
   <title>Login</title>
   <script src="https://cdn.tailwindcss.com"></script>
 </head>
 <body class="flex items-center justify-center h-screen bg-gray-100">
-  <form id="loginForm" class="bg-white p-6 rounded shadow-md w-96">
-    <h1 class="text-2xl mb-4 font-bold text-center">Login</h1>
-    <input type="email" name="email" id="email" placeholder="Email" required class="w-full p-2 mb-4 border rounded" />
-    <input type="password" name="senha" id="senha" placeholder="Senha" required class="w-full p-2 mb-4 border rounded" />
-    <button type="submit" class="bg-blue-600 text-white w-full py-2 rounded">Entrar</button>
-    <p id="msg" class="mt-2 text-center text-sm"></p>
-  </form>
-<script>
-  const form = document.getElementById("loginForm");
-  const msg = document.getElementById("msg");
+  <div class="bg-white p-8 rounded shadow-md w-full max-w-md">
+    <h1 class="text-2xl font-bold text-center mb-4">Login</h1>
+    <form id="loginForm" class="space-y-4">
+      <input type="email" id="email" placeholder="Email" required class="w-full p-2 border rounded bg-blue-50" />
+      <input type="password" id="senha" placeholder="Senha" required class="w-full p-2 border rounded" />
+      <button type="submit" class="w-full bg-blue-600 text-white p-2 rounded">Entrar</button>
+      <div class="text-sm text-blue-700 underline text-center">
+        <a href="/frontend/reset_senha.html">Esqueci minha senha</a>
+      </div>
+      <div id="erro" class="text-center text-red-600 mt-2"></div>
+    </form>
+  </div>
 
-  form.addEventListener("submit", async (e) => {
-    e.preventDefault();
-    msg.textContent = "";
+  <script>
+    document.getElementById("loginForm").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const email = document.getElementById("email").value;
+      const senha = document.getElementById("senha").value;
 
-    const email = document.getElementById("email").value;
-    const senha = document.getElementById("senha").value;
-
-    try {
-      const res = await fetch("http://127.0.0.1:8000/usuarios/login", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/x-www-form-urlencoded"
-        },
-        body: new URLSearchParams({
-          username: email,
-          password: senha
-        })
-      });
-
-      const data = await res.json();
-
-      if (res.ok && data.access_token) {
-        localStorage.setItem("token", data.access_token);
-
-        const rotaRes = await fetch("http://127.0.0.1:8000/usuarios/rota_por_papel", {
-          headers: {
-            Authorization: `Bearer ${data.access_token}`
-          }
+      try {
+        const res = await fetch("http://127.0.0.1:8000/login", {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body: new URLSearchParams({ username: email, password: senha }),
         });
 
-        const rotaData = await rotaRes.json();
+        const data = await res.json();
 
-        if (rotaRes.ok && rotaData.rota) {
-          window.location.href = rotaData.rota;
-        } else {
-          msg.textContent = rotaData.detail || "Erro ao redirecionar.";
-          msg.className = "text-red-600";
+        if (!res.ok) {
+          if (res.status === 404) {
+            document.getElementById("erro").textContent = "Usuário não encontrado.";
+          } else if (res.status === 401) {
+            document.getElementById("erro").textContent = "Senha incorreta.";
+          } else {
+            document.getElementById("erro").textContent = data.detail || "Erro desconhecido.";
+          }
+          return;
         }
 
-      } else {
-        msg.textContent = data.detail || "Credenciais inválidas.";
-        msg.className = "text-red-600";
+        localStorage.setItem("token", data.access_token);
+        window.location.href = "/usuarios/rota_por_papel";
+      } catch (err) {
+        document.getElementById("erro").textContent = "Erro ao conectar com o servidor.";
       }
-    } catch (error) {
-      msg.textContent = "Erro na conexão ou resposta inesperada.";
-      msg.className = "text-red-600";
-    }
-  });
-</script>
+    });
+  </script>
 </body>
 </html>
